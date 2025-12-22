@@ -1,0 +1,307 @@
+#!/bin/bash
+
+# Directory/File size checker
+# Usage: dsize [option] path
+# Author: YangYupeng (yongy2022@outlook.com)
+
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+# Display help information
+show_help() {
+    cat << EOF
+Usage: $0 [OPTIONS] <PATH>
+
+Options:
+    -d, --detail        Show sizes of subdirectories (directories only)
+    -h, --help          Display this help message
+    -s, --sort          Sort subdirectories by size in descending order (use with -d)
+    -c, --no-color      Disable colored output
+
+Examples:
+    $0 /home/user              # Show total size of directory
+    $0 -d /home/user           # Show directory size with subdirectory breakdown
+    $0 -d -s /home/user        # Show subdirectories sorted by size
+    $0 file.txt                # Show file size
+    $0 -d -c /home/user        # Show sizes without colors
+
+EOF
+
+    exit 0
+}
+
+# Format size display with color and right-aligned unit letter
+# Third argument: pad (true/false) - whether to pad numeric part to fixed width
+format_size() {
+    local size=$1
+    local use_color=$2
+    local pad=${3:-true}  # default to padding
+    local result=""
+    local color=""
+    local numeric_part=""
+    local unit_prefix=""
+
+    if [ "$size" -lt 1024 ]; then
+        if [ "$pad" = true ]; then
+            numeric_part=$(printf "%8d" "$size")
+        else
+            numeric_part="$size"
+        fi
+        unit_prefix=""
+        color=$WHITE
+        result="${numeric_part}B"
+    elif [ "$size" -lt 1048576 ]; then
+        if [ "$pad" = true ]; then
+            numeric_part=$(awk "BEGIN {printf \"%7.2f\", $size/1024}")
+        else
+            numeric_part=$(awk "BEGIN {printf \"%.2f\", $size/1024}")
+        fi
+        unit_prefix="K"
+        color=$GREEN
+        result="${numeric_part}${unit_prefix}B"
+    elif [ "$size" -lt 1073741824 ]; then
+        if [ "$pad" = true ]; then
+            numeric_part=$(awk "BEGIN {printf \"%7.2f\", $size/1048576}")
+        else
+            numeric_part=$(awk "BEGIN {printf \"%.2f\", $size/1048576}")
+        fi
+        unit_prefix="M"
+        color=$YELLOW
+        result="${numeric_part}${unit_prefix}B"
+    elif [ "$size" -lt 1099511627776 ]; then
+        if [ "$pad" = true ]; then
+            numeric_part=$(awk "BEGIN {printf \"%7.2f\", $size/1073741824}")
+        else
+            numeric_part=$(awk "BEGIN {printf \"%.2f\", $size/1073741824}")
+        fi
+        unit_prefix="G"
+        color=$RED
+        result="${numeric_part}${unit_prefix}B"
+    else
+        if [ "$pad" = true ]; then
+            numeric_part=$(awk "BEGIN {printf \"%7.2f\", $size/1099511627776}")
+        else
+            numeric_part=$(awk "BEGIN {printf \"%.2f\", $size/1099511627776}")
+        fi
+        unit_prefix="T"
+        color=$RED
+        result="${numeric_part}${unit_prefix}B"
+    fi
+
+    if [ "$use_color" = true ]; then
+        echo -e "${color}${result}${RESET}"
+    else
+        echo "$result"
+    fi
+}
+
+# Calculate display width of string (considering CJK characters)
+# Uses Python's unicodedata or fallback to byte calculation
+display_width() {
+    local str="$1"
+    # Try using python3 for accurate width calculation
+    if command -v python3 &> /dev/null; then
+        python3 -c "
+import unicodedata
+s = '''$str'''
+width = sum(2 if unicodedata.east_asian_width(c) in 'FW' else 1 for c in s)
+print(width)
+" 2>/dev/null
+    else
+        # Fallback: rough estimation based on bytes
+        local bytes=$(printf "%s" "$str" | wc -c)
+        local chars=$(printf "%s" "$str" | wc -m)
+        echo $((chars + (bytes - chars) / 2))
+    fi
+}
+
+# Print with proper alignment
+print_aligned() {
+    local name="$1"
+    local size="$2"
+    local is_dir="$3"
+    local use_color=$4
+    local max_width=50
+
+    # Calculate actual display width
+    local actual_width=$(display_width "$name")
+
+    # Calculate required spaces for alignment
+    local spaces=$((max_width - actual_width))
+    if [ $spaces -lt 1 ]; then
+        spaces=1
+    fi
+
+    # Choose color based on type
+    if [ "$use_color" = true ]; then
+        if [ "$is_dir" = true ]; then
+            printf "${BOLD}${BLUE}%s${RESET}%${spaces}s%15s\n" "$name" "" "$size"
+        else
+            printf "${BOLD}${CYAN}%s${RESET}%${spaces}s%15s\n" "$name" "" "$size"
+        fi
+    else
+        printf "%s%${spaces}s%7s\n" "$name" "" "$size"
+    fi
+}
+
+# Initialize parameters
+SHOW_DETAIL=false
+SORT_OUTPUT=false
+USE_COLOR=true
+TARGET_PATH=""
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -d|--detail)
+            SHOW_DETAIL=true
+            shift
+            ;;
+        -s|--sort)
+            SORT_OUTPUT=true
+            shift
+            ;;
+        -c|--no-color)
+            USE_COLOR=false
+            shift
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        *)
+            TARGET_PATH="$1"
+            shift
+            ;;
+    esac
+done
+
+# Check if path is provided
+if [ -z "$TARGET_PATH" ]; then
+    echo -e "${BOLD}${RED}Error: Please provide a file or directory path${RESET}"
+    echo "Use $0 --help to see usage information"
+    exit 1
+fi
+
+# Check if path exists
+if [ ! -e "$TARGET_PATH" ]; then
+    echo -e "${BOLD}${RED}Error: Path does not exist($TARGET_PATH)${RESET}"
+    exit 1
+fi
+
+# Handle symbolic links
+IS_SYMLINK=false
+REAL_PATH="$TARGET_PATH"
+if [ -L "$TARGET_PATH" ]; then
+    IS_SYMLINK=true
+    REAL_PATH=$(readlink -f "$TARGET_PATH")
+
+    # Check if link target exists
+    if [ ! -e "$REAL_PATH" ]; then
+        echo -e "${BOLD}${RED}Error: Symbolic link target does not exist($REAL_PATH)${RESET}"
+        exit 1
+    fi
+fi
+
+# Get total size (in bytes)
+# For symbolic links, measure the target file/directory
+TOTAL_SIZE=$(du -sb --exclude=/proc "$REAL_PATH" 2>/dev/null | cut -f1)
+
+if [ -z "$TOTAL_SIZE" ]; then
+    echo -e "${BOLD}${RED}Error: Unable to read path size (possibly a permission issue)${RESET}"
+    exit 1
+fi
+
+# Display total size
+if [ "$USE_COLOR" = true ]; then
+    echo -e "${BOLD}${MAGENTA}=========================================${RESET}"
+    if [ "$IS_SYMLINK" = true ]; then
+        echo -e "${BOLD}Symbolic Link:${RESET} ${CYAN}$TARGET_PATH${RESET}"
+        echo -e "${BOLD}Points To:${RESET} ${CYAN}$REAL_PATH${RESET}"
+        if [ -f "$REAL_PATH" ]; then
+            echo -e "${BOLD}Type:${RESET} File"
+        else
+            echo -e "${BOLD}Type:${RESET} Directory"
+        fi
+    else
+        if [ -f "$TARGET_PATH" ]; then
+            echo -e "${BOLD}File:${RESET} ${CYAN}$TARGET_PATH${RESET}"
+        else
+            echo -e "${BOLD}Directory:${RESET} ${BLUE}$TARGET_PATH${RESET}"
+        fi
+    fi
+    echo -e "${BOLD}Total Size:${RESET} $(format_size ${TOTAL_SIZE} true false) ${WHITE}($TOTAL_SIZE bytes)${RESET}"
+    echo -e "${BOLD}${MAGENTA}=========================================${RESET}"
+else
+    echo "========================================="
+    if [ "$IS_SYMLINK" = true ]; then
+        echo "Symbolic Link: $TARGET_PATH"
+        echo "Points To: $REAL_PATH"
+        if [ -f "$REAL_PATH" ]; then
+            echo "Type: File"
+        else
+            echo "Type: Directory"
+        fi
+    else
+        if [ -f "$TARGET_PATH" ]; then
+            echo "File: $TARGET_PATH"
+        else
+            echo "Directory: $TARGET_PATH"
+        fi
+    fi
+    echo "Total Size: $(format_size $TOTAL_SIZE false false) ($TOTAL_SIZE bytes)"
+    echo "========================================="
+fi
+
+# If it's a directory and detailed view is requested
+# For symbolic links, use the real path
+if [ -d "$REAL_PATH" ] && [ "$SHOW_DETAIL" = true ]; then
+    echo ""
+    if [ "$USE_COLOR" = true ]; then
+        echo -e "${BOLD}${YELLOW}Subdirectory Sizes:${RESET}"
+        echo -e "${YELLOW}-----------------------------------------${RESET}"
+    else
+        echo "Subdirectory Sizes:"
+        echo "-----------------------------------------"
+    fi
+
+    # Get subdirectory sizes
+    if [ "$SORT_OUTPUT" = true ]; then
+        # Sort by size (descending)
+        du -sb --exclude=/proc "$REAL_PATH"/* 2>/dev/null | sort -rn | while read size path; do
+            formatted=$(format_size $size $USE_COLOR)
+            basename=$(basename "$path")
+            is_dir=false
+            if [ -d "$path" ]; then
+                is_dir=true
+            fi
+            print_aligned "$basename" "$formatted" "$is_dir" $USE_COLOR
+        done
+    else
+        # No sorting
+        du -sb --exclude=/proc "$REAL_PATH"/* 2>/dev/null | while read size path; do
+            formatted=$(format_size $size $USE_COLOR)
+            basename=$(basename "$path")
+            is_dir=false
+            if [ -d "$path" ]; then
+                is_dir=true
+            fi
+            print_aligned "$basename" "$formatted" "$is_dir" $USE_COLOR
+        done
+    fi
+
+    if [ "$USE_COLOR" = true ]; then
+        echo -e "${YELLOW}-----------------------------------------${RESET}"
+    else
+        echo "-----------------------------------------"
+    fi
+fi
+
+exit 0
