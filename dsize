@@ -1,8 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Directory/File size checker
-# Usage: dsize [option] path
-# Author: YangYupeng (yongy2022@outlook.com)
+# dsize - Display size information for files and directories
+#
+# Usage: dsize [OPTIONS] <PATH>
+#
+# Author: Yang Yupeng <yongy2022@outlook.com>
+# Contributors:
+#   - ChatGPT (OpenAI)
+#   - Claude (Anthropic)
+#
+# License: MIT
 
 # Color definitions
 RED='\033[0;31m'
@@ -18,21 +25,38 @@ RESET='\033[0m'
 # Display help information
 show_help() {
     cat << EOF
-Usage: $0 [OPTIONS] <PATH>
+Usage: dsize [OPTIONS] <PATH>
 
 Options:
-    -d, --detail        Show sizes of subdirectories (directories only)
-    -h, --help          Display this help message
-    -s, --sort          Sort subdirectories by size in descending order (use with -d)
+    -d, --detail        Show sizes of subdirectories
+                        (exclude hidden files and directories)
+
+    -v, --verbose       Show sizes of subdirectories
+                        (include hidden files and directories)
+
+                        Note: -d/--detail and -v/--verbose are mutually exclusive
+
+    -s, --sort          Sort subdirectories by size in descending order
+                        (use with -d or -v)
+
     -c, --no-color      Disable colored output
+    -h, --help          Display this help message
+
+Arguments:
+    PATH                File or directory to inspect.
+
+                        - If PATH is a file, show its size.
+                        - If PATH is a directory, show the total size.
+                        - If used with -d or -v, show sizes of subdirectories.
+                        - Symbolic links are resolved and the target is measured.
 
 Examples:
-    $0 /home/user              # Show total size of directory
-    $0 -d /home/user           # Show directory size with subdirectory breakdown
-    $0 -d -s /home/user        # Show subdirectories sorted by size
-    $0 file.txt                # Show file size
-    $0 -d -c /home/user        # Show sizes without colors
-
+    dsize ~
+    dsize -d /home/user
+    dsize -v /home/user
+    dsize -d -s /home/user
+    dsize file.txt
+    dsize -d -c /home/user
 EOF
 
     exit 0
@@ -153,7 +177,9 @@ print_aligned() {
 }
 
 # Initialize parameters
+DETAIL_MODE=""  # "", "normal", "verbose"
 SHOW_DETAIL=false
+SHOW_HIDDEN=false
 SORT_OUTPUT=false
 USE_COLOR=true
 TARGET_PATH=""
@@ -162,7 +188,23 @@ TARGET_PATH=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         -d|--detail)
+            if [ "$DETAIL_MODE" = "verbose" ]; then
+                echo -e "${BOLD}${RED}Error: -d/--detail cannot be used together with -v/--verbose${RESET}"
+                exit 1
+            fi
+            DETAIL_MODE="normal"
             SHOW_DETAIL=true
+            SHOW_HIDDEN=false
+            shift
+            ;;
+        -v|--verbose)
+            if [ "$DETAIL_MODE" = "normal" ]; then
+                echo -e "${BOLD}${RED}Error: -v/--verbose cannot be used together with -d/--detail${RESET}"
+                exit 1
+            fi
+            DETAIL_MODE="verbose"
+            SHOW_DETAIL=true
+            SHOW_HIDDEN=true
             shift
             ;;
         -s|--sort)
@@ -174,7 +216,12 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            show_help
+            if command -v less >/dev/null 2>&1; then
+                show_help | less -F -X
+            else
+                show_help
+            fi
+            exit 0
             ;;
         *)
             TARGET_PATH="$1"
@@ -273,29 +320,38 @@ if [ -d "$REAL_PATH" ] && [ "$SHOW_DETAIL" = true ]; then
     fi
 
     # Get subdirectory sizes
+    # Build path list based on SHOW_HIDDEN
+    if [ "$SHOW_HIDDEN" = true ]; then
+        PATHS=("$REAL_PATH"/{*,.*})
+    else
+        PATHS=("$REAL_PATH"/*)
+    fi
+
     if [ "$SORT_OUTPUT" = true ]; then
         # Sort by size (descending)
-        du -sb --exclude=/proc "$REAL_PATH"/* 2>/dev/null | sort -rn | while read size path; do
-            formatted=$(format_size $size $USE_COLOR)
+        du -sb --exclude=/proc "${PATHS[@]}" 2>/dev/null \
+        | grep -vE '/\.\.?$' \
+        | sort -rn \
+        | while read size path; do
+            formatted=$(format_size "$size" "$USE_COLOR")
             basename=$(basename "$path")
             is_dir=false
-            if [ -d "$path" ]; then
-                is_dir=true
-            fi
-            print_aligned "$basename" "$formatted" "$is_dir" $USE_COLOR
+            [ -d "$path" ] && is_dir=true
+            print_aligned "$basename" "$formatted" "$is_dir" "$USE_COLOR"
         done
     else
         # No sorting
-        du -sb --exclude=/proc "$REAL_PATH"/* 2>/dev/null | while read size path; do
-            formatted=$(format_size $size $USE_COLOR)
+        du -sb --exclude=/proc "${PATHS[@]}" 2>/dev/null \
+        | grep -vE '/\.\.?$' \
+        | while read size path; do
+            formatted=$(format_size "$size" "$USE_COLOR")
             basename=$(basename "$path")
             is_dir=false
-            if [ -d "$path" ]; then
-                is_dir=true
-            fi
-            print_aligned "$basename" "$formatted" "$is_dir" $USE_COLOR
+            [ -d "$path" ] && is_dir=true
+            print_aligned "$basename" "$formatted" "$is_dir" "$USE_COLOR"
         done
     fi
+
 
     if [ "$USE_COLOR" = true ]; then
         echo -e "${YELLOW}-----------------------------------------${RESET}"
