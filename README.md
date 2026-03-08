@@ -1,92 +1,116 @@
 # dsize
 
-[English](https://www.zdoc.app/en/Youpen-y/dsize)
+**[English](README.md) | [中文](README.zh-CN.md)**
 
-`dsize` 是一个简易的Bash 脚本工具，用于以美观、易读的格式显示文件和目录的大小。相比于传统的 `du` 命令，它提供了更好的视觉反馈、颜色区分以及对中文字符对齐的优化支持。
+`dsize` is a simple Bash script tool that displays file and directory sizes in a beautiful, human-readable format. Compared to the traditional `du` command, it provides better visual feedback, color differentiation, and optimized support for Chinese character alignment.
 
 ![ScreenShot](./screenshot.png)
 
 ---
 
-## ✨ 核心特性
+## ✨ Key Features
 
-* **人类可读的格式**：自动将字节转换为 B，K，M，G，T 等单位，并根据大小级别显示不同颜色（如绿色表示 KB，黄色表示 MB，红色表示 GB/TB）。
-* **智能对齐**：针对终端显示进行了优化。如果系统中安装了 Python 3，脚本将精确计算中文字符宽度，确保文件名与大小数据严格对齐。
-* **深层查看**：支持展示目录下的子项大小（嵌套深度为1），方便快速定位空间占用。
-* **排序功能**：支持按文件大小进行降序排列（`--sort`），让“空间杀手”一目了然。
-* **符号链接支持**：自动解析软链接（Symbolic Link），显示链接指向的真实路径及其目标的大小。
-* **色彩开关**：支持 `-c` 选项禁用颜色输出，方便在自动化脚本或导出日志时使用。
+* **Human-readable format**: Automatically converts bytes to B, K, M, G, T units, with color coding based on size levels (green for KB, yellow for MB, red for GB/TB).
+* **Smart alignment**: Optimized for terminal display. If Python 3 is installed on the system, the script will precisely calculate Chinese character widths to ensure filenames and size data are strictly aligned.
+* **Deep view**: Supports displaying the size of sub-items within a directory (nesting depth of 1), making it easy to quickly locate space usage.
+* **Sorting**: Supports sorting by file size in descending order (`--sort`) to easily identify "space hogs".
+* **Symbolic link support**: Automatically resolves symbolic links and displays the real path.
+* **Color toggle**: Supports the `-c` option to disable color output for use in automated scripts or log exports.
 
 ---
 
-## 🚀 安装指南
+## 🚀 Installation Guide
 
-1.  **保存脚本**：下载 `dsize` 的文件。
-2.  **赋予执行权限**：
+1. **Save the script**: Download the `dsize` file.
+2. **Grant execute permissions**:
     ```bash
     chmod +x dsize
     ```
-3.  **移动到系统路径（可选）**：
-    为了方便在任何目录下使用，建议将其移动到 `/usr/local/bin`：
+3. **Move to system path (optional)**:
+    To use it conveniently from any directory, it's recommended to move it to `/usr/local/bin`:
     ```bash
     sudo mv dsize /usr/local/bin/
     ```
 
 ---
 
-## 📖 使用方法
+## 🆚 Why dsize over du?
 
-### 命令格式
+`dsize` is essentially an enhanced wrapper around `du` that addresses common pain points:
+
+| Feature | `du` command | `dsize` |
+|---------|--------------|---------|
+| **Human-readable output** | Needs `-h` flag, breaks sorting | Always human-readable, correct sorting |
+| **Color coding** | No | Size-based colors (green/yellow/red) |
+| **CJK alignment** | Misaligned filenames | Smart width calculation |
+| **Symbolic links** | Shows link itself | Resolves and displays real path |
+| **Sorting** | Requires pipe to sort | Built-in `-s` flag |
+| **Visual appeal** | Raw numbers | Beautiful framed output |
+| **Memory efficiency** | — | Streaming processing for large dirs |
+
+### Color Coding Guide
+
+| Size Range | Color | Meaning |
+|------------|-------|---------|
+| B (Bytes) | White | Tiny files |
+| KB | Green | Small files |
+| MB | Yellow | Medium files |
+| GB/TB | Red | Large files - attention needed |
+
+---
+
+## 📖 Usage
+
+### Command Format
 ```bash
-dsize [选项] <路径>
+dsize [OPTIONS] <PATH>
 ```
 
-### 常用选项
-| 选项	| 长选项	| 描述 |
+### Common Options
+| Option | Long Option | Description |
 |---|---|---|
-|`-d`	| `--detail`	| 显示子目录/文件大小（不含隐藏文件）|
-|`-v`	|`--verbose`	| 显示所有子目录/文件（包含隐藏文件）|
-|`-s`	|`--sort`	| 按大小降序排列（需配合 `-d` 或 `-v` 使用）|
-|`-c`	|`--no-color`	| 禁用彩色输出 |
-|`-h`	|`--help`	| 显示帮助信息 |
+| `-d` | `--detail` | Show subdirectory/file sizes (excluding hidden files) |
+| `-v` | `--verbose` | Show all subdirectories/files (including hidden files) |
+| `-s` | `--sort` | Sort by size in descending order (use with `-d` or `-v`) |
+| `-c` | `--no-color` | Disable colored output |
+| `-h` | `--help` | Display help information |
 
-
-### 示例演示
-- 查看当前目录总大小：
+### Examples
+- View current directory total size:
 ```bash
 dsize .
 ```
 
-- 查看子目录详情并排序：
+- View subdirectory details with sorting:
 ```bash
 dsize -d -s /var/log
 ```
 
-- 包含隐藏文件查看用户家目录：
+- View user home directory including hidden files:
 ```bash
 dsize -v ~
 ```
 
-- 查看单个文件信息：
+- View single file information:
 ```bash
 dsize file.txt
 ```
 
-## 🛠 依赖要求
-- Bash: 脚本运行的核心环境。
-
-- awk: 用于精确的浮点数计算。
-
-- Python 3 (可选): 用于处理 CJK（中日韩）字符的对齐。如果未安装，脚本将退回到基于字节数的估算对齐。
+## 🛠 Requirements
+- **Bash**: Core environment for script execution.
+- **awk**: Used for precise floating-point calculations.
+- **Python 3** (optional): Used for handling CJK (Chinese, Japanese, Korean) character alignment. If not installed, the script will fall back to byte-based estimation alignment.
 
 ---
-## 📄 许可证
-本项目采用 MIT 许可证
+
+## 📄 License
+MIT License.
 
 ---
-## 🤝 贡献者
-- Yang Yupeng (yongy2022@outlook.com) - 作者
 
-- ChatGPT (OpenAI) - 辅助开发与逻辑优化
+## 🤝 Contributors
+- **Yang Yupeng** (yongy2022@outlook.com) - Author
+- **GLM** (ZAI) - Assisted with development and logic optimization
+- **ChatGPT** (OpenAI) - Assisted with development and logic optimization
+- **Claude** (Anthropic) - Assisted with development and logic optimization
 
-- Claude (Anthropic) - 辅助开发与逻辑优化

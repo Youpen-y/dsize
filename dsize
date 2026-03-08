@@ -237,9 +237,9 @@ if [ -z "$TARGET_PATH" ]; then
     exit 1
 fi
 
-# Check if path exists
-if [ ! -e "$TARGET_PATH" ]; then
-    echo -e "${BOLD}${RED}Error: Path does not exist($TARGET_PATH)${RESET}"
+# Check if path exists (symbolic link itself counts as existing)
+if [ ! -e "$TARGET_PATH" ] && [ ! -L "$TARGET_PATH" ]; then
+    echo -e "${BOLD}${RED}Error: Path does not exist(\"$TARGET_PATH\")${RESET}"
     exit 1
 fi
 
@@ -252,7 +252,7 @@ if [ -L "$TARGET_PATH" ]; then
 
     # Check if link target exists
     if [ ! -e "$REAL_PATH" ]; then
-        echo -e "${BOLD}${RED}Error: Symbolic link target does not exist($REAL_PATH)${RESET}"
+        echo -e "${BOLD}${RED}Error: Symbolic link target does not exist(\"$REAL_PATH\")${RESET}"
         exit 1
     fi
 fi
@@ -319,18 +319,18 @@ if [ -d "$REAL_PATH" ] && [ "$SHOW_DETAIL" = true ]; then
         echo "-----------------------------------------"
     fi
 
-    # Get subdirectory sizes
-    # Build path list based on SHOW_HIDDEN
+    # Get subdirectory sizes using streaming approach (memory efficient)
+    # Build find command based on SHOW_HIDDEN
     if [ "$SHOW_HIDDEN" = true ]; then
-        PATHS=("$REAL_PATH"/{*,.*})
+        FIND_CMD=(find "$REAL_PATH" -mindepth 1 -maxdepth 1)
     else
-        PATHS=("$REAL_PATH"/*)
+        FIND_CMD=(find "$REAL_PATH" -mindepth 1 -maxdepth 1 -not -name '.*')
     fi
 
     if [ "$SORT_OUTPUT" = true ]; then
         # Sort by size (descending)
-        du -sb --exclude=/proc "${PATHS[@]}" 2>/dev/null \
-        | grep -vE '/\.\.?$' \
+        "${FIND_CMD[@]}" -print0 2>/dev/null \
+        | xargs -0 du -sb 2>/dev/null \
         | sort -rn \
         | while read size path; do
             formatted=$(format_size "$size" "$USE_COLOR")
@@ -340,9 +340,9 @@ if [ -d "$REAL_PATH" ] && [ "$SHOW_DETAIL" = true ]; then
             print_aligned "$basename" "$formatted" "$is_dir" "$USE_COLOR"
         done
     else
-        # No sorting
-        du -sb --exclude=/proc "${PATHS[@]}" 2>/dev/null \
-        | grep -vE '/\.\.?$' \
+        # No sorting - process in filesystem order
+        "${FIND_CMD[@]}" -print0 2>/dev/null \
+        | xargs -0 du -sb 2>/dev/null \
         | while read size path; do
             formatted=$(format_size "$size" "$USE_COLOR")
             basename=$(basename "$path")
